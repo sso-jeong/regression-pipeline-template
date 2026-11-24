@@ -1,0 +1,47 @@
+id: SC-MSG-001
+title: 두 사람이 메시지를 주고받으면 순번대로 조회된다
+tags: [smoke, messaging]
+steps:
+  - name: alice 생성
+    request: {method: POST, path: /v1/users, json: {name: alice}}
+    expect: {status: 201, json: {name: alice}}
+    save: {alice: $.id}
+
+  - name: bob 생성
+    request: {method: POST, path: /v1/users, json: {name: bob}}
+    expect: {status: 201}
+    save: {bob: $.id}
+
+  - name: 1:1 채팅방 생성
+    request:
+      method: POST
+      path: /v1/chats
+      json: {member_ids: ["{alice}", "{bob}"], title: 점심}
+    expect: {status: 201, json: {member_ids: ["{alice}", "{bob}"], title: 점심}}
+    save: {chat: $.id}
+
+  - name: alice가 첫 메시지 전송
+    request:
+      method: POST
+      path: /v1/chats/{chat}/messages
+      headers: {X-User-Id: "{alice}"}
+      json: {text: "오늘 뭐 먹어요?"}
+    expect: {status: 201, json: {seq: 1, sender_id: "{alice}"}}
+
+  - name: bob이 답장
+    request:
+      method: POST
+      path: /v1/chats/{chat}/messages
+      headers: {X-User-Id: "{bob}"}
+      json: {text: 국밥이요}
+    expect: {status: 201, json: {seq: 2, sender_id: "{bob}"}}
+
+  - name: bob이 목록 조회
+    request:
+      method: GET
+      path: /v1/chats/{chat}/messages
+      headers: {X-User-Id: "{bob}"}
+    expect:
+      status: 200
+      json: {next_after_seq: null}
+      lengths: {$.items: 2}

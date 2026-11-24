@@ -1,0 +1,95 @@
+# AI 초안 (claude-opus-5-5, claude-code). 리뷰 후 머지.
+# 위험: 사용자 name이나 메시지 text의 minLength/maxLength 검증이 빠지거나 경계값(1자, 50자)을 거부하면 실패한다
+id: SC-AI-USER-001
+title: 사용자 이름은 1~50자, 메시지 본문은 1자 이상이어야 한다
+tags:
+- regression
+- negative
+- user
+- messaging
+origin: ai
+steps:
+- name: 빈 이름은 422
+  request:
+    method: POST
+    path: /v1/users
+    json:
+      name: ''
+  expect:
+    status: 422
+- name: 51자 이름은 422
+  request:
+    method: POST
+    path: /v1/users
+    json:
+      name: abcdefghijabcdefghijabcdefghijabcdefghijabcdefghijk
+  expect:
+    status: 422
+- name: 50자 이름은 허용
+  request:
+    method: POST
+    path: /v1/users
+    json:
+      name: abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij
+  expect:
+    status: 201
+    json:
+      name: abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij
+  save:
+    a: $.id
+- name: 1자 이름은 허용
+  request:
+    method: POST
+    path: /v1/users
+    json:
+      name: b
+  expect:
+    status: 201
+    json:
+      name: b
+  save:
+    b: $.id
+- name: 만든 사용자 조회
+  request:
+    method: GET
+    path: /v1/users/{a}
+  expect:
+    status: 200
+    json:
+      id: '{a}'
+      name: abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij
+- name: 채팅방 생성
+  request:
+    method: POST
+    path: /v1/chats
+    json:
+      member_ids:
+      - '{a}'
+      - '{b}'
+  expect:
+    status: 201
+  save:
+    chat: $.id
+- name: 빈 본문 메시지는 422
+  request:
+    method: POST
+    path: /v1/chats/{chat}/messages
+    headers:
+      X-User-Id: '{a}'
+    json:
+      text: ''
+  expect:
+    status: 422
+- name: 1자 메시지는 허용되고 거부된 요청이 순번을 쓰지 않았으므로 seq 1이다
+  request:
+    method: POST
+    path: /v1/chats/{chat}/messages
+    headers:
+      X-User-Id: '{a}'
+    json:
+      text: z
+  expect:
+    status: 201
+    json:
+      seq: 1
+      text: z

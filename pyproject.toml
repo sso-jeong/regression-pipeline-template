@@ -1,0 +1,24 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra --strict-markers"
+markers = [
+    "smoke: 배포 직후 바로 돌리는 핵심 경로",
+    "regression: 전체 회귀",
+    "negative: 오류·권한·경계값",
+    "user: 사용자 API",
+    "chat: 채팅방 API",
+    "messaging: 메시지 전송·조회",
+    "read: 읽음·안읽음",
+    "ai_generated: AI가 초안을 만든 시나리오",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"ai/generate_scenarios.py" = ["E501"]  # 프롬프트 문장은 줄바꿈하지 않음

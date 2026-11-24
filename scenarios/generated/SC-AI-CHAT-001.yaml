@@ -1,0 +1,68 @@
+# AI 초안 (claude-opus-5-5, claude-code). 리뷰 후 머지.
+# 위험: 없는 리소스에 대한 요청이 200·500을 반환하거나 빈 결과를 만들어 내면 실패한다
+id: SC-AI-CHAT-001
+title: 존재하지 않는 사용자·채팅방을 대상으로 한 요청은 404를 반환한다
+tags:
+- regression
+- negative
+- chat
+origin: ai
+steps:
+- name: 사용자 A 생성
+  request:
+    method: POST
+    path: /v1/users
+    json:
+      name: nf-a
+  expect:
+    status: 201
+  save:
+    a: $.id
+- name: 없는 사용자 조회는 404
+  request:
+    method: GET
+    path: /v1/users/no-such-user-zz9
+  expect:
+    status: 404
+- name: 없는 채팅방 조회는 404
+  request:
+    method: GET
+    path: /v1/chats/no-such-chat-zz9
+  expect:
+    status: 404
+- name: 없는 채팅방에 메시지 전송은 404
+  request:
+    method: POST
+    path: /v1/chats/no-such-chat-zz9/messages
+    headers:
+      X-User-Id: '{a}'
+    json:
+      text: hi
+  expect:
+    status: 404
+- name: 없는 채팅방 메시지 목록은 404
+  request:
+    method: GET
+    path: /v1/chats/no-such-chat-zz9/messages
+    headers:
+      X-User-Id: '{a}'
+  expect:
+    status: 404
+- name: 없는 채팅방 읽음 처리는 404
+  request:
+    method: POST
+    path: /v1/chats/no-such-chat-zz9/read
+    headers:
+      X-User-Id: '{a}'
+    json:
+      up_to_seq: 0
+  expect:
+    status: 404
+- name: 없는 채팅방 안 읽은 수는 404
+  request:
+    method: GET
+    path: /v1/chats/no-such-chat-zz9/unread
+    headers:
+      X-User-Id: '{a}'
+  expect:
+    status: 404

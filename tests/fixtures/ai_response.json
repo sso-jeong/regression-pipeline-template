@@ -1,0 +1,234 @@
+{
+ "scenarios": [
+  {
+   "id": "SC-FX-MSG-001",
+   "title": "after_seq가 마지막 순번이면 빈 페이지와 null 커서를 준다",
+   "risk": "커서 끝 처리 오류로 무한 페이지 루프가 생기는 결함",
+   "tags": [
+    "regression",
+    "messaging"
+   ],
+   "steps": [
+    {
+     "name": "alice 생성",
+     "method": "POST",
+     "path": "/v1/users",
+     "headers": [],
+     "query": [],
+     "body_json": "{\"name\": \"alice\"}",
+     "expect_status": 201,
+     "expect_json": "",
+     "save": [
+      {
+       "var": "alice",
+       "path": "$.id"
+      }
+     ]
+    },
+    {
+     "name": "bob 생성",
+     "method": "POST",
+     "path": "/v1/users",
+     "headers": [],
+     "query": [],
+     "body_json": "{\"name\": \"bob\"}",
+     "expect_status": 201,
+     "expect_json": "",
+     "save": [
+      {
+       "var": "bob",
+       "path": "$.id"
+      }
+     ]
+    },
+    {
+     "name": "채팅방",
+     "method": "POST",
+     "path": "/v1/chats",
+     "headers": [],
+     "query": [],
+     "body_json": "{\"member_ids\": [\"{alice}\", \"{bob}\"]}",
+     "expect_status": 201,
+     "expect_json": "",
+     "save": [
+      {
+       "var": "chat",
+       "path": "$.id"
+      }
+     ]
+    },
+    {
+     "name": "메시지 1건",
+     "method": "POST",
+     "path": "/v1/chats/{chat}/messages",
+     "headers": [
+      {
+       "name": "X-User-Id",
+       "value": "{alice}"
+      }
+     ],
+     "query": [],
+     "body_json": "{\"text\": \"hi\"}",
+     "expect_status": 201,
+     "expect_json": "{\"seq\": 1}",
+     "save": []
+    },
+    {
+     "name": "끝 다음 조회",
+     "method": "GET",
+     "path": "/v1/chats/{chat}/messages",
+     "headers": [
+      {
+       "name": "X-User-Id",
+       "value": "{bob}"
+      }
+     ],
+     "query": [
+      {
+       "name": "after_seq",
+       "value": "1"
+      }
+     ],
+     "body_json": "",
+     "expect_status": 200,
+     "expect_json": "{\"items\": [], \"next_after_seq\": null}",
+     "save": []
+    }
+   ]
+  },
+  {
+   "id": "SC-FX-READ-001",
+   "title": "멤버가 아니면 안 읽은 수를 조회할 수 없다",
+   "risk": "다른 사람 채팅방의 활동량이 노출되는 권한 결함",
+   "tags": [
+    "negative",
+    "read"
+   ],
+   "steps": [
+    {
+     "name": "alice",
+     "method": "POST",
+     "path": "/v1/users",
+     "headers": [],
+     "query": [],
+     "body_json": "{\"name\": \"alice\"}",
+     "expect_status": 201,
+     "expect_json": "",
+     "save": [
+      {
+       "var": "a",
+       "path": "$.id"
+      }
+     ]
+    },
+    {
+     "name": "bob",
+     "method": "POST",
+     "path": "/v1/users",
+     "headers": [],
+     "query": [],
+     "body_json": "{\"name\": \"bob\"}",
+     "expect_status": 201,
+     "expect_json": "",
+     "save": [
+      {
+       "var": "b",
+       "path": "$.id"
+      }
+     ]
+    },
+    {
+     "name": "eve",
+     "method": "POST",
+     "path": "/v1/users",
+     "headers": [],
+     "query": [],
+     "body_json": "{\"name\": \"eve\"}",
+     "expect_status": 201,
+     "expect_json": "",
+     "save": [
+      {
+       "var": "e",
+       "path": "$.id"
+      }
+     ]
+    },
+    {
+     "name": "채팅방",
+     "method": "POST",
+     "path": "/v1/chats",
+     "headers": [],
+     "query": [],
+     "body_json": "{\"member_ids\": [\"{a}\", \"{b}\"]}",
+     "expect_status": 201,
+     "expect_json": "",
+     "save": [
+      {
+       "var": "c",
+       "path": "$.id"
+      }
+     ]
+    },
+    {
+     "name": "eve 조회",
+     "method": "GET",
+     "path": "/v1/chats/{c}/unread",
+     "headers": [
+      {
+       "name": "X-User-Id",
+       "value": "{e}"
+      }
+     ],
+     "query": [],
+     "body_json": "",
+     "expect_status": 403,
+     "expect_json": "",
+     "save": []
+    }
+   ]
+  },
+  {
+   "id": "SC-FX-MSG-002",
+   "title": "공백만 있는 이름으로는 사용자를 만들 수 없어야 한다",
+   "risk": "공백 이름 계정이 생겨 채팅방 멤버 목록에 빈 이름이 보이는 결함",
+   "tags": [
+    "negative",
+    "messaging"
+   ],
+   "steps": [
+    {
+     "name": "공백 이름으로 생성 시도",
+     "method": "POST",
+     "path": "/v1/users",
+     "headers": [],
+     "query": [],
+     "body_json": "{\"name\": \"   \"}",
+     "expect_status": 422,
+     "expect_json": "",
+     "save": []
+    }
+   ]
+  },
+  {
+   "id": "SC-FX-BAD-001",
+   "title": "형식이 깨진 출력",
+   "risk": "-",
+   "tags": [
+    "smoke"
+   ],
+   "steps": [
+    {
+     "name": "x",
+     "method": "GET",
+     "path": "/health",
+     "headers": [],
+     "query": [],
+     "body_json": "{not json",
+     "expect_status": 200,
+     "expect_json": "",
+     "save": []
+    }
+   ]
+  }
+ ]
+}

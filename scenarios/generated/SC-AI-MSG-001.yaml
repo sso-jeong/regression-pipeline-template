@@ -1,0 +1,105 @@
+# AI 초안 (claude-opus-5-5, claude-code). 리뷰 후 머지.
+# 위험: Idempotency-Key 재전송 때 메시지가 중복 생성되거나 순번이 하나 더 올라가면 실패한다
+id: SC-AI-MSG-001
+title: 같은 Idempotency-Key로 재전송하면 같은 메시지가 돌아오고 새 메시지는 생기지 않는다
+tags:
+- regression
+- messaging
+origin: ai
+steps:
+- name: 사용자 A 생성
+  request:
+    method: POST
+    path: /v1/users
+    json:
+      name: idem-a
+  expect:
+    status: 201
+    json:
+      name: idem-a
+  save:
+    a: $.id
+- name: 사용자 B 생성
+  request:
+    method: POST
+    path: /v1/users
+    json:
+      name: idem-b
+  expect:
+    status: 201
+    json:
+      name: idem-b
+  save:
+    b: $.id
+- name: 채팅방 생성
+  request:
+    method: POST
+    path: /v1/chats
+    json:
+      member_ids:
+      - '{a}'
+      - '{b}'
+  expect:
+    status: 201
+  save:
+    chat: $.id
+- name: 키를 붙여 첫 전송
+  request:
+    method: POST
+    path: /v1/chats/{chat}/messages
+    headers:
+      X-User-Id: '{a}'
+      Idempotency-Key: idem-key-001
+    json:
+      text: hello
+  expect:
+    status: 201
+    json:
+      seq: 1
+      text: hello
+      sender_id: '{a}'
+      chat_id: '{chat}'
+  save:
+    msg_id: $.id
+- name: 같은 키로 재전송하면 같은 메시지(seq 1)를 돌려준다
+  request:
+    method: POST
+    path: /v1/chats/{chat}/messages
+    headers:
+      X-User-Id: '{a}'
+      Idempotency-Key: idem-key-001
+    json:
+      text: hello
+  expect:
+    status: 201
+    json:
+      seq: 1
+      text: hello
+- name: 키 없이 새 메시지를 보내면 seq 2가 된다
+  request:
+    method: POST
+    path: /v1/chats/{chat}/messages
+    headers:
+      X-User-Id: '{a}'
+    json:
+      text: second
+  expect:
+    status: 201
+    json:
+      seq: 2
+      text: second
+- name: 목록에는 메시지가 2개뿐이다
+  request:
+    method: GET
+    path: /v1/chats/{chat}/messages
+    headers:
+      X-User-Id: '{b}'
+  expect:
+    status: 200
+    json:
+      items:
+      - seq: 1
+        text: hello
+      - seq: 2
+        text: second
+      next_after_seq: null

@@ -1,0 +1,122 @@
+name: Regression
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 18 * * *" # 매일 03:00 KST 야간 회귀
+  workflow_dispatch:
+    inputs:
+      marker:
+        description: "pytest -m 식 (예: smoke, 'negative and messaging'). 비우면 전체"
+        default: ""
+      inject_bugs:
+        description: "회귀 훈련: 서버에 버그 주입 (pagination,idempotency,unread)"
+        default: ""
+
+concurrency:
+  group: regression-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  INJECT_BUGS: ${{ inputs.inject_bugs }}
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: ruff check .
+      - run: ruff format --check .
+
+  # v2: pytest 하네스. 샤드를 나눠 병렬 실행하고, 각 샤드는 자기 서버를 띄운다.
+  api-tests:
+    needs: lint
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: scenarios # YAML 시나리오 + OpenAPI 계약
+            tests: tests/test_scenarios.py
+          - shard: behavior # 페이지 순회, 동시성, 멱등성, 경계값
+            tests: tests/test_messaging.py
+          - shard: tooling # 스펙 드리프트, AI 생성기 후처리
+            tests: tests/test_spec.py tests/test_ai_pipeline.py
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: pytest (${{ matrix.shard }})
+        run: >
+          pytest ${{ matrix.tests }}
+          -m "${{ inputs.marker }}"
+          --junitxml=reports/${{ matrix.shard }}.xml
+          --html=reports/${{ matrix.shard }}.html --self-contained-html
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reports-${{ matrix.shard }}
+          path: reports/
+
+  # v1: Postman 컬렉션을 Newman으로 실행. 같은 대상 서버를 검증한다.
+  newman:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: 대상 서버 기동
+        run: |
+          uvicorn app.main:app --port 8000 --log-level warning &
+          timeout 15 bash -c 'until curl -sf http://127.0.0.1:8000/health; do sleep 0.2; done'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: newman
+        run: >
+          npx -y newman@6.2.1 run postman/messaging-regression.postman_collection.json
+          --env-var baseUrl=http://127.0.0.1:8000
+          -r cli,junit --reporter-junit-export reports/newman.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reports-newman
+          path: reports/
+
+  # 샤드 결과를 모아 한 장으로 요약. 실패가 있으면 이 잡이 품질 게이트로 막는다.
+  report:
+    needs: [api-tests, newman]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: reports-*
+          merge-multiple: true
+          path: reports
+      - name: 결과 요약
+        run: python3 tools/summarize_junit.py reports/*.xml | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: regression-report
+          path: reports/
