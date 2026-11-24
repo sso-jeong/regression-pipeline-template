@@ -1,0 +1,43 @@
+id: SC-READ-001
+title: 읽음 처리하면 안 읽은 수가 줄고, 마지막 순번을 넘겨 읽을 수는 없다
+tags: [smoke, read]
+steps:
+  - name: alice 생성
+    request: {method: POST, path: /v1/users, json: {name: alice}}
+    expect: {status: 201}
+    save: {alice: $.id}
+
+  - name: bob 생성
+    request: {method: POST, path: /v1/users, json: {name: bob}}
+    expect: {status: 201}
+    save: {bob: $.id}
+
+  - name: 채팅방
+    request: {method: POST, path: /v1/chats, json: {member_ids: ["{alice}", "{bob}"]}}
+    expect: {status: 201}
+    save: {chat: $.id}
+
+  - name: 메시지 1
+    request: {method: POST, path: "/v1/chats/{chat}/messages", headers: {X-User-Id: "{alice}"}, json: {text: 하나}}
+    expect: {status: 201}
+
+  - name: 메시지 2
+    request: {method: POST, path: "/v1/chats/{chat}/messages", headers: {X-User-Id: "{alice}"}, json: {text: 둘}}
+    expect: {status: 201}
+    save: {last: $.seq}
+
+  - name: bob 안 읽음 2
+    request: {method: GET, path: "/v1/chats/{chat}/unread", headers: {X-User-Id: "{bob}"}}
+    expect: {status: 200, json: {unread_count: 2}}
+
+  - name: bob이 끝까지 읽음
+    request: {method: POST, path: "/v1/chats/{chat}/read", headers: {X-User-Id: "{bob}"}, json: {up_to_seq: "{last}"}}
+    expect: {status: 200, json: {last_read_seq: 2}}
+
+  - name: bob 안 읽음 0
+    request: {method: GET, path: "/v1/chats/{chat}/unread", headers: {X-User-Id: "{bob}"}}
+    expect: {status: 200, json: {unread_count: 0}}
+
+  - name: 마지막 순번을 넘으면 400
+    request: {method: POST, path: "/v1/chats/{chat}/read", headers: {X-User-Id: "{bob}"}, json: {up_to_seq: 99}}
+    expect: {status: 400}

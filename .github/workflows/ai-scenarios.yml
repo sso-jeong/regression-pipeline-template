@@ -1,0 +1,58 @@
+name: AI Scenario Drafts
+
+# API 스펙이 바뀌면 Claude가 시나리오 초안을 만들고, 사람이 리뷰하도록 PR을 연다.
+# 필요한 Secret: ANTHROPIC_API_KEY
+
+on:
+  push:
+    branches: [main]
+    paths: ["specs/openapi.json"]
+  workflow_dispatch:
+    inputs:
+      count:
+        description: "만들 시나리오 수"
+        default: "5"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  draft:
+    runs-on: ubuntu-latest
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - name: API 키 확인
+        if: env.ANTHROPIC_API_KEY == ''
+        run: |
+          echo "::notice::ANTHROPIC_API_KEY Secret이 없어 건너뜁니다."
+          exit 0
+      - uses: actions/checkout@v4
+        if: env.ANTHROPIC_API_KEY != ''
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        if: env.ANTHROPIC_API_KEY != ''
+        with:
+          python-version: "3.12"
+          cache: pip
+      - if: env.ANTHROPIC_API_KEY != ''
+        run: pip install -r requirements.txt -r requirements-ai.txt
+      - name: 시나리오 초안 생성 + 로컬 서버에서 자체 검증
+        if: env.ANTHROPIC_API_KEY != ''
+        run: >
+          python ai/generate_scenarios.py
+          --count "${{ inputs.count || '5' }}"
+          --diff-base "${{ github.event.before || 'HEAD~1' }}"
+          --report ai-report.md
+      - name: 리뷰용 PR 열기
+        if: env.ANTHROPIC_API_KEY != ''
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: ai/scenario-drafts-${{ github.run_id }}
+          title: "test: AI 시나리오 초안 (${{ github.sha }})"
+          commit-message: "test: AI 시나리오 초안 추가"
+          add-paths: scenarios/generated/**
+          body-path: ai-report.md
+          labels: ai-draft

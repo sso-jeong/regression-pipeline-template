@@ -1,0 +1,124 @@
+# AI 초안 (claude-opus-5-5, claude-code). 리뷰 후 머지.
+# 위험: next_after_seq 커서 계산이 하나씩 어긋나거나 마지막 페이지에서 null이 아니면 실패한다
+id: SC-AI-MSG-002
+title: limit와 after_seq 커서로 메시지를 빠짐없이, 겹치지 않게 페이지 단위로 조회한다
+tags:
+- regression
+- messaging
+origin: ai
+steps:
+- name: 사용자 A 생성
+  request:
+    method: POST
+    path: /v1/users
+    json:
+      name: page-a
+  expect:
+    status: 201
+  save:
+    a: $.id
+- name: 사용자 B 생성
+  request:
+    method: POST
+    path: /v1/users
+    json:
+      name: page-b
+  expect:
+    status: 201
+  save:
+    b: $.id
+- name: 채팅방 생성
+  request:
+    method: POST
+    path: /v1/chats
+    json:
+      member_ids:
+      - '{a}'
+      - '{b}'
+  expect:
+    status: 201
+  save:
+    chat: $.id
+- name: 메시지 1
+  request:
+    method: POST
+    path: /v1/chats/{chat}/messages
+    headers:
+      X-User-Id: '{a}'
+    json:
+      text: m1
+  expect:
+    status: 201
+    json:
+      seq: 1
+- name: 메시지 2
+  request:
+    method: POST
+    path: /v1/chats/{chat}/messages
+    headers:
+      X-User-Id: '{b}'
+    json:
+      text: m2
+  expect:
+    status: 201
+    json:
+      seq: 2
+- name: 메시지 3
+  request:
+    method: POST
+    path: /v1/chats/{chat}/messages
+    headers:
+      X-User-Id: '{a}'
+    json:
+      text: m3
+  expect:
+    status: 201
+    json:
+      seq: 3
+- name: 첫 페이지(limit=2)
+  request:
+    method: GET
+    path: /v1/chats/{chat}/messages
+    headers:
+      X-User-Id: '{a}'
+    params:
+      limit: '2'
+  expect:
+    status: 200
+    json:
+      items:
+      - seq: 1
+        text: m1
+      - seq: 2
+        text: m2
+      next_after_seq: 2
+  save:
+    cursor: $.next_after_seq
+- name: 커서로 다음 페이지 조회하면 마지막 페이지다
+  request:
+    method: GET
+    path: /v1/chats/{chat}/messages
+    headers:
+      X-User-Id: '{a}'
+    params:
+      limit: '2'
+      after_seq: '{cursor}'
+  expect:
+    status: 200
+    json:
+      items:
+      - seq: 3
+        text: m3
+      next_after_seq: null
+- name: 마지막 순번 뒤를 조회하면 다음 커서가 null이다
+  request:
+    method: GET
+    path: /v1/chats/{chat}/messages
+    headers:
+      X-User-Id: '{a}'
+    params:
+      after_seq: '3'
+  expect:
+    status: 200
+    json:
+      next_after_seq: null

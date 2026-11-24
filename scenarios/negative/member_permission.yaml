@@ -1,0 +1,45 @@
+id: SC-NEG-001
+title: 채팅방 멤버가 아니면 메시지를 보내거나 읽을 수 없다
+tags: [negative, messaging]
+steps:
+  - name: alice 생성
+    request: {method: POST, path: /v1/users, json: {name: alice}}
+    expect: {status: 201}
+    save: {alice: $.id}
+
+  - name: bob 생성
+    request: {method: POST, path: /v1/users, json: {name: bob}}
+    expect: {status: 201}
+    save: {bob: $.id}
+
+  - name: 외부인 mallory 생성
+    request: {method: POST, path: /v1/users, json: {name: mallory}}
+    expect: {status: 201}
+    save: {mallory: $.id}
+
+  - name: alice-bob 채팅방
+    request: {method: POST, path: /v1/chats, json: {member_ids: ["{alice}", "{bob}"]}}
+    expect: {status: 201}
+    save: {chat: $.id}
+
+  - name: mallory 전송 시도는 403
+    request:
+      method: POST
+      path: /v1/chats/{chat}/messages
+      headers: {X-User-Id: "{mallory}"}
+      json: {text: 들어가도 되나요}
+    expect: {status: 403}
+
+  - name: mallory 조회 시도도 403
+    request:
+      method: GET
+      path: /v1/chats/{chat}/messages
+      headers: {X-User-Id: "{mallory}"}
+    expect: {status: 403}
+
+  - name: 없는 채팅방은 404
+    request:
+      method: GET
+      path: /v1/chats/c_doesnotexist/messages
+      headers: {X-User-Id: "{alice}"}
+    expect: {status: 404, json: {detail: chat not found}}

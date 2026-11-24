@@ -1,0 +1,112 @@
+# AI 초안 (claude-opus-5-5, claude-code). 리뷰 후 머지.
+# 위험: limit 1~100 범위나 after_seq 최솟값 0 검증이 빠지거나 경계값(1, 100)을 거부하면 실패한다
+id: SC-AI-MSG-003
+title: 메시지 목록 조회의 limit와 after_seq 범위를 벗어나면 422를 반환한다
+tags:
+- regression
+- negative
+- messaging
+origin: ai
+steps:
+- name: 사용자 A 생성
+  request:
+    method: POST
+    path: /v1/users
+    json:
+      name: lim-a
+  expect:
+    status: 201
+  save:
+    a: $.id
+- name: 사용자 B 생성
+  request:
+    method: POST
+    path: /v1/users
+    json:
+      name: lim-b
+  expect:
+    status: 201
+  save:
+    b: $.id
+- name: 채팅방 생성
+  request:
+    method: POST
+    path: /v1/chats
+    json:
+      member_ids:
+      - '{a}'
+      - '{b}'
+  expect:
+    status: 201
+  save:
+    chat: $.id
+- name: 메시지 1개 전송
+  request:
+    method: POST
+    path: /v1/chats/{chat}/messages
+    headers:
+      X-User-Id: '{a}'
+    json:
+      text: x
+  expect:
+    status: 201
+    json:
+      seq: 1
+- name: limit=0은 422
+  request:
+    method: GET
+    path: /v1/chats/{chat}/messages
+    headers:
+      X-User-Id: '{a}'
+    params:
+      limit: '0'
+  expect:
+    status: 422
+- name: limit=101은 422
+  request:
+    method: GET
+    path: /v1/chats/{chat}/messages
+    headers:
+      X-User-Id: '{a}'
+    params:
+      limit: '101'
+  expect:
+    status: 422
+- name: after_seq=-1은 422
+  request:
+    method: GET
+    path: /v1/chats/{chat}/messages
+    headers:
+      X-User-Id: '{a}'
+    params:
+      after_seq: '-1'
+  expect:
+    status: 422
+- name: limit=1은 허용
+  request:
+    method: GET
+    path: /v1/chats/{chat}/messages
+    headers:
+      X-User-Id: '{a}'
+    params:
+      limit: '1'
+  expect:
+    status: 200
+    json:
+      items:
+      - seq: 1
+      next_after_seq: null
+- name: limit=100은 허용
+  request:
+    method: GET
+    path: /v1/chats/{chat}/messages
+    headers:
+      X-User-Id: '{a}'
+    params:
+      limit: '100'
+  expect:
+    status: 200
+    json:
+      items:
+      - seq: 1
+      next_after_seq: null
